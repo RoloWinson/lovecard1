@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>3D Love Hologram</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    body {
+      background: radial-gradient(circle at center, #090912 0%, #000000 100%);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .hint {
+      position: absolute;
+      top: 24px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.35);
+      z-index: 10;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    .action-btn {
+      position: absolute;
+      bottom: 40px;
+      z-index: 10;
+      padding: 15px 36px;
+      font-size: 13px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 999px;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.06);
+    }
+    .action-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.6);
+      box-shadow: 0 10px 35px rgba(0, 0, 0, 0.9), 0 0 25px rgba(255, 255, 255, 0.2);
+    }
+    .action-btn:active {
+      transform: scale(0.94);
+    }
+  </style>
+</head>
+<body>
+  <div class="hint" id="hint">Вращайте пальцем в 3D</div>
+  <canvas id="stage"></canvas>
+  <button id="transformBtn" class="action-btn">Собрать сердце</button>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.expand();
+      tg.ready();
+    }
+
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+    const btn = document.getElementById('transformBtn');
+    const hint = document.getElementById('hint');
+
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    // 1. Оффлайн-спрайт для моментального рендера без просадок FPS
+    const SPRITE_W = 100;
+    const SPRITE_H = 30;
+    const spriteCanvas = document.createElement('canvas');
+    const spriteCtx = spriteCanvas.getContext('2d');
+
+    function createCachedSprite() {
+      spriteCanvas.width = SPRITE_W;
+      spriteCanvas.height = SPRITE_H;
+      spriteCtx.clearRect(0, 0, SPRITE_W, SPRITE_H);
+      spriteCtx.shadowColor = 'rgba(255, 255, 255, 0.95)';
+      spriteCtx.shadowBlur = 8;
+      spriteCtx.fillStyle = '#ffffff';
+      spriteCtx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      spriteCtx.textAlign = 'center';
+      spriteCtx.textBaseline = 'middle';
+      spriteCtx.fillText('i love you', SPRITE_W / 2, SPRITE_H / 2);
+    }
+    createCachedSprite();
+
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    });
+
+    const COUNT = 220;
+    let items = [];
+    let isHeart = false;
+    let animTime = 0;
+
+    // Углы поворота 3D-пространства
+    let rotX = 0;
+    let rotY = 0;
+    let velX = 0;
+    let velY = 0.007; // Фоновое медленное автовращение
+    let isDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+
+    // Обработка 3D-интерактивного вращения
+    function onPointerDown(e) {
+      isDragging = true;
+      const x = e.clientX || e.touches[0].clientX;
+      const y = e.clientY || e.touches[0].clientY;
+      lastMouseX = x;
+      lastMouseY = y;
+      velX = 0;
+      velY = 0;
+      hint.style.opacity = '0.15';
+    }
+
+    function onPointerMove(e) {
+      if (!isDragging) return;
+      const x = e.clientX || e.touches[0].clientX;
+      const y = e.clientY || e.touches[0].clientY;
+      const dx = x - lastMouseX;
+      const dy = y - lastMouseY;
+
+      rotY += dx * 0.007;
+      rotX -= dy * 0.007;
+
+      velY = dx * 0.005;
+      velX = -dy * 0.005;
+
+      lastMouseX = x;
+      lastMouseY = y;
+    }
+
+    function onPointerUp() {
+      isDragging = false;
+    }
+
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('mousemove', onPointerMove);
+    window.addEventListener('mouseup', onPointerUp);
+
+    window.addEventListener('touchstart', onPointerDown, { passive: true });
+    window.addEventListener('touchmove', onPointerMove, { passive: true });
+    window.addEventListener('touchend', onPointerUp);
+
+    // Математика 3D-поверхности сердца
+    function getHeart3D(t, u) {
+      // t от 0 до 2PI (контур), u от -1 до 1 (толщина по оси Z)
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      
+      // Заужение к низу для анатомической трехмерной формы
+      const zScale = Math.sin(t / 2) * (1 - Math.abs(y) / 22);
+      const z = u * 8 * Math.max(0.2, zScale);
+
+      return { x, y, z };
+    }
+
+    class TextItem3D {
+      constructor(index) {
+        this.index = index;
+
+        // Текущие 3D координаты
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+
+        // Целевые координаты
+        this.targetX = 0;
+        this.targetY = 0;
+        this.targetZ = 0;
+
+        this.baseHeartX = 0;
+        this.baseHeartY = 0;
+        this.baseHeartZ = 0;
+
+        // 3D сфера (начальное состояние)
+        const phi = Math.acos(-1 + (2 * index) / COUNT);
+        const theta = Math.sqrt(COUNT * Math.PI) * phi;
+        const sphereRadius = 140;
+
+        this.sphereX = sphereRadius * Math.cos(theta) * Math.sin(phi);
+        this.sphereY = sphereRadius * Math.sin(theta) * Math.sin(phi);
+        this.sphereZ = sphereRadius * Math.cos(phi);
+
+        // 3D сердце (целевое состояние)
+        const t = Math.PI * 2 * (index / COUNT);
+        const u = (Math.random() - 0.5) * 2;
+        const scale = 11;
+        const h = getHeart3D(t, u);
+
+        this.heartX = h.x * scale;
+        this.heartY = h.y * scale;
+        this.heartZ = h.z * scale;
+
+        // Стартуем в сфере
+        this.x = this.sphereX;
+        this.y = this.sphereY;
+        this.z = this.sphereZ;
+        this.targetX = this.sphereX;
+        this.targetY = this.sphereY;
+        this.targetZ = this.sphereZ;
+
+        this.speed = 0.04 + Math.random() * 0.02;
+      }
+
+      update() {
+        this.x += (this.targetX - this.x) * this.speed;
+        this.y += (this.targetY - this.y) * this.speed;
+        this.z += (this.targetZ - this.z) * this.speed;
+
+        // 3D-пульсация сердца
+        if (isHeart) {
+          const tBeat = (animTime * 2.4) % (Math.PI * 2);
+          let beat = 0;
+          if (tBeat < 0.6) {
+            beat = Math.sin(tBeat * (Math.PI / 0.6)) * 0.07;
+          } else if (tBeat > 0.8 && tBeat < 1.3) {
+            beat = Math.sin((tBeat - 0.8) * (Math.PI / 0.5)) * 0.04;
+          }
+
+          this.targetX = this.heartX * (1 + beat);
+          this.targetY = this.heartY * (1 + beat);
+          this.targetZ = this.heartZ * (1 + beat);
+        }
+      }
+    }
+
+    function init() {
+      items = [];
+      for (let i = 0; i < COUNT; i++) {
+        items.push(new TextItem3D(i));
+      }
+    }
+
+    btn.addEventListener('click', () => {
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('success');
+      }
+
+      isHeart = !isHeart;
+      btn.innerText = isHeart ? 'Рассеять сферу' : 'Собрать сердце';
+
+      items.forEach(item => {
+        if (isHeart) {
+          item.targetX = item.heartX;
+          item.targetY = item.heartY;
+          item.targetZ = item.heartZ;
+        } else {
+          item.targetX = item.sphereX;
+          item.targetY = item.sphereY;
+          item.targetZ = item.sphereZ;
+        }
+      });
+    });
+
+    function loop() {
+      animTime += 0.02;
+
+      // Кинетическое затухание скорости вращения
+      if (!isDragging) {
+        rotX += velX;
+        rotY += velY;
+        velX *= 0.96;
+        velY = velY * 0.96 + 0.0004; // Сохраняем приятное фоновое вращение
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      const cosY = Math.cos(rotY);
+      const sinY = Math.sin(rotY);
+      const cosX = Math.cos(rotX);
+      const sinX = Math.sin(rotX);
+
+      const fov = 380; // Фокусное расстояние камеры
+      const centerY = height / 2 - 20;
+
+      // Массив для Z-сортировки (чтобы передние фразы перекрывали задние)
+      const renderList = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        item.update();
+
+        // 1. Поворот вокруг оси Y
+        let x1 = item.x * cosY - item.z * sinY;
+        let z1 = item.z * cosY + item.x * sinY;
+
+        // 2. Поворот вокруг оси X
+        let y1 = item.y * cosX - z1 * sinX;
+        let z2 = z1 * cosX + item.y * sinX;
+
+        // Перспективная проекция 3D -> 2D
+        const cameraDistance = 320;
+        const scale = fov / (fov + z2 + cameraDistance);
+
+        const screenX = width / 2 + x1 * scale;
+        const screenY = centerY + y1 * scale;
+
+        // Эффект глубины резкости (передний план ярче и крупнее)
+        const depthAlpha = Math.max(0.12, Math.min(1.0, (z2 + 200) / 360));
+
+        renderList.push({
+          x: screenX,
+          y: screenY,
+          z: z2,
+          scale: scale * 0.9,
+          alpha: depthAlpha
+        });
+      }
+
+      // Сортировка по Z: сначала рисуем дальние, затем ближние
+      renderList.sort((a, b) => a.z - b.z);
+
+      // Отрисовка
+      for (let i = 0; i < renderList.length; i++) {
+        const p = renderList[i];
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.scale(p.scale, p.scale);
+        ctx.globalAlpha = p.alpha;
+        ctx.drawImage(spriteCanvas, -SPRITE_W / 2, -SPRITE_H / 2);
+        ctx.restore();
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    init();
+    loop();
+  </script>
+</body>
+</html>
