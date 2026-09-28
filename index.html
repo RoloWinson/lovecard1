@@ -22,7 +22,7 @@
       align-items: center;
       justify-content: center;
       height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
     }
     canvas {
       position: absolute;
@@ -87,6 +87,43 @@
       tg.ready();
     }
 
+    // === TAPTIC ENGINE SOUNDTRACK (Акустический дизайн виброотклика iPhone) ===
+    const Haptics = {
+      // Ультра-легкий тактильный тик (шестеренка/параллакс)
+      tick() {
+        try { tg?.HapticFeedback?.selectionChanged(); } catch (e) {}
+      },
+      // Мягкий бархатный щелчок
+      soft() {
+        try { tg?.HapticFeedback?.impactOccurred('soft'); } catch (e) {}
+      },
+      // Упругий клик средней силы
+      medium() {
+        try { tg?.HapticFeedback?.impactOccurred('medium'); } catch (e) {}
+      },
+      // Острый акцент
+      rigid() {
+        try { tg?.HapticFeedback?.impactOccurred('rigid'); } catch (e) {}
+      },
+      // Глубокий резонанс
+      heavy() {
+        try { tg?.HapticFeedback?.impactOccurred('heavy'); } catch (e) {}
+      },
+      // Каскадная волна при сборке
+      transformFlow() {
+        this.soft();
+        setTimeout(() => this.tick(), 140);
+        setTimeout(() => this.tick(), 280);
+        setTimeout(() => this.medium(), 520);
+      },
+      // Кинематографичный взрыв Supernova
+      supernova() {
+        this.rigid();
+        setTimeout(() => this.heavy(), 65);
+        setTimeout(() => this.soft(), 220);
+      }
+    };
+
     const canvas = document.getElementById('stage');
     const ctx = canvas.getContext('2d');
     const btn = document.getElementById('transformBtn');
@@ -95,7 +132,7 @@
     let width = (canvas.width = window.innerWidth);
     let height = (canvas.height = window.innerHeight);
 
-    // Кэш спрайта фразы
+    // Кэш текстуры фразы "i love you" для идеальных 60 FPS
     const SPRITE_W = 110;
     const SPRITE_H = 32;
     const spriteCanvas = document.createElement('canvas');
@@ -108,7 +145,7 @@
       spriteCtx.shadowColor = 'rgba(255, 255, 255, 0.95)';
       spriteCtx.shadowBlur = 7;
       spriteCtx.fillStyle = '#ffffff';
-      spriteCtx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      spriteCtx.font = '600 13px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif';
       spriteCtx.textAlign = 'center';
       spriteCtx.textBaseline = 'middle';
       spriteCtx.fillText('i love you', SPRITE_W / 2, SPRITE_H / 2);
@@ -141,6 +178,10 @@
     let pointerStartY = 0;
     let lastMouseX = 0;
     let lastMouseY = 0;
+    let lastHapticAngle = 0;
+
+    // Таймеры для анатомического двойного пульса
+    let beatPhase = 0;
 
     function getHeart3D(t, u) {
       const x = 16 * Math.pow(Math.sin(t), 3);
@@ -213,33 +254,23 @@
         this.speed = 0.038 + Math.random() * 0.02;
         this.itemScale = isLetterK ? 0.78 : 0.95;
 
-        // Координаты проекции для проверки тапа
         this.screenX = 0;
         this.screenY = 0;
       }
 
-      update() {
+      update(beatVal) {
         this.x += (this.targetX - this.x) * this.speed;
         this.y += (this.targetY - this.y) * this.speed;
         this.z += (this.targetZ - this.z) * this.speed;
 
         if (isHeart) {
-          const tBeat = (animTime * 2.3) % (Math.PI * 2);
-          let beat = 0;
-          if (tBeat < 0.6) {
-            beat = Math.sin(tBeat * (Math.PI / 0.6)) * 0.06;
-          } else if (tBeat > 0.8 && tBeat < 1.3) {
-            beat = Math.sin((tBeat - 0.8) * (Math.PI / 0.5)) * 0.035;
-          }
-
-          this.targetX = this.heartX * (1 + beat);
-          this.targetY = this.heartY * (1 + beat);
-          this.targetZ = this.heartZ * (1 + beat);
+          this.targetX = this.heartX * (1 + beatVal);
+          this.targetY = this.heartY * (1 + beatVal);
+          this.targetZ = this.heartZ * (1 + beatVal);
         }
       }
     }
 
-    // Класс частицы кометного взрыва
     class BurstParticle3D {
       constructor(originX, originY, originZ) {
         this.x = originX;
@@ -273,13 +304,9 @@
     }
 
     function triggerSupernova() {
-      if (tg?.HapticFeedback) {
-        tg.HapticFeedback.impactOccurred('heavy');
-      }
-
+      Haptics.supernova();
       flashIntensity = 1.0;
 
-      // Порождаем 90 комет в 3D
       for (let i = 0; i < 90; i++) {
         burstParticles.push(new BurstParticle3D(
           (Math.random() - 0.5) * 20,
@@ -289,7 +316,6 @@
       }
     }
 
-    // Обработка касаний: различаем свайп вращения и клик по "К"
     function onPointerDown(e) {
       isDragging = true;
       const x = e.clientX || e.touches[0].clientX;
@@ -300,6 +326,7 @@
       lastMouseY = y;
       velX = 0;
       velY = 0;
+      lastHapticAngle = rotY;
     }
 
     function onPointerMove(e) {
@@ -315,6 +342,12 @@
       velY = dx * 0.005;
       velX = -dy * 0.005;
 
+      // Приятные микро-тики Taptic Engine при вращении (хрустальная трещотка)
+      if (Math.abs(rotY - lastHapticAngle) > 0.22) {
+        Haptics.tick();
+        lastHapticAngle = rotY;
+      }
+
       lastMouseX = x;
       lastMouseY = y;
     }
@@ -327,9 +360,7 @@
       const endY = lastMouseY;
       const dist = Math.hypot(endX - pointerStartX, endY - pointerStartY);
 
-      // Если это был короткий клик/тап (не длинный свайп)
       if (dist < 12) {
-        // Проверяем клик в область буквы К
         let clickedK = false;
         for (let item of items) {
           if (item.isLetterK) {
@@ -341,7 +372,6 @@
           }
         }
 
-        // Если кликнули по букве К или рядом с центром
         const centerDist = Math.hypot(endX - width / 2, endY - (height / 2 - 35));
         if (clickedK || (isHeart && centerDist < 60)) {
           triggerSupernova();
@@ -411,12 +441,11 @@
 
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (tg?.HapticFeedback) {
-        tg.HapticFeedback.notificationOccurred('success');
-      }
-
       isHeart = !isHeart;
       btn.innerText = isHeart ? 'Рассеять сферу' : 'Собрать сердце';
+
+      // Каскадный отклик переключения
+      Haptics.transformFlow();
 
       items.forEach(item => {
         if (isHeart) {
@@ -443,7 +472,28 @@
 
       ctx.clearRect(0, 0, width, height);
 
-      // Вспышка в центре при взрыве
+      // Расчет анатомического биения сердца и тактильный пульс
+      let beat = 0;
+      if (isHeart) {
+        const prevPhase = beatPhase;
+        beatPhase = (animTime * 2.2) % (Math.PI * 2);
+
+        if (beatPhase < 0.6) {
+          beat = Math.sin(beatPhase * (Math.PI / 0.6)) * 0.06;
+          // Первый удар (глубокий)
+          if (prevPhase > 5.5 || beatPhase < 0.05) {
+            Haptics.soft();
+          }
+        } else if (beatPhase > 0.8 && beatPhase < 1.3) {
+          beat = Math.sin((beatPhase - 0.8) * (Math.PI / 0.5)) * 0.035;
+          // Второй удар (эхо)
+          if (prevPhase <= 0.8 && beatPhase > 0.8) {
+            Haptics.tick();
+          }
+        }
+      }
+
+      // Вспышка в центре
       if (flashIntensity > 0.01) {
         const grad = ctx.createRadialGradient(
           width / 2, height / 2 - 35, 5,
@@ -470,10 +520,9 @@
       const centerY = height / 2 - 20;
       const renderList = [];
 
-      // 3D рендер надписей
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        item.update();
+        item.update(beat);
 
         let x1 = item.x * cosY - item.z * sinY;
         let z1 = item.z * cosY + item.x * sinY;
@@ -500,7 +549,6 @@
         });
       }
 
-      // 3D рендер взрывных частиц-комет
       for (let i = burstParticles.length - 1; i >= 0; i--) {
         const bp = burstParticles[i];
         bp.update();
