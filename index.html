@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>3D Love Hologram</title>
+  <title>i love you</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * {
@@ -15,14 +15,14 @@
       touch-action: none;
     }
     body {
-      background: radial-gradient(circle at center, #090912 0%, #000000 100%);
+      background: radial-gradient(circle at center, #0c0c16 0%, #000000 100%);
       overflow: hidden;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
     }
     canvas {
       position: absolute;
@@ -34,36 +34,39 @@
     }
     .hint {
       position: absolute;
-      top: 24px;
-      font-size: 11px;
+      top: 28px;
+      font-size: 12px;
       letter-spacing: 2px;
       text-transform: uppercase;
-      color: rgba(255, 255, 255, 0.35);
+      color: rgba(255, 255, 255, 0.45);
       z-index: 10;
       pointer-events: none;
       transition: opacity 0.5s ease;
+      font-weight: 500;
+      text-align: center;
+      padding: 0 10px;
     }
     .action-btn {
       position: absolute;
-      bottom: 40px;
+      bottom: 38px;
       z-index: 10;
-      padding: 15px 36px;
+      padding: 15px 38px;
       font-size: 13px;
       letter-spacing: 2.5px;
       text-transform: uppercase;
       font-weight: 600;
       color: #ffffff;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.25);
       border-radius: 999px;
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       cursor: pointer;
       transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.06);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(255, 255, 255, 0.05);
     }
     .action-btn:hover {
-      background: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.14);
       border-color: rgba(255, 255, 255, 0.6);
       box-shadow: 0 10px 35px rgba(0, 0, 0, 0.9), 0 0 25px rgba(255, 255, 255, 0.2);
     }
@@ -73,7 +76,7 @@
   </style>
 </head>
 <body>
-  <div class="hint" id="hint">Вращайте пальцем в 3D</div>
+  <div class="hint" id="hint">Крути в 3D • Нажми на букву «К»</div>
   <canvas id="stage"></canvas>
   <button id="transformBtn" class="action-btn">Собрать сердце</button>
 
@@ -92,9 +95,9 @@
     let width = (canvas.width = window.innerWidth);
     let height = (canvas.height = window.innerHeight);
 
-    // 1. Оффлайн-спрайт для моментального рендера без просадок FPS
-    const SPRITE_W = 100;
-    const SPRITE_H = 30;
+    // Кэш спрайта фразы
+    const SPRITE_W = 110;
+    const SPRITE_H = 32;
     const spriteCanvas = document.createElement('canvas');
     const spriteCtx = spriteCanvas.getContext('2d');
 
@@ -103,9 +106,9 @@
       spriteCanvas.height = SPRITE_H;
       spriteCtx.clearRect(0, 0, SPRITE_W, SPRITE_H);
       spriteCtx.shadowColor = 'rgba(255, 255, 255, 0.95)';
-      spriteCtx.shadowBlur = 8;
+      spriteCtx.shadowBlur = 7;
       spriteCtx.fillStyle = '#ffffff';
-      spriteCtx.font = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+      spriteCtx.font = '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       spriteCtx.textAlign = 'center';
       spriteCtx.textBaseline = 'middle';
       spriteCtx.fillText('i love you', SPRITE_W / 2, SPRITE_H / 2);
@@ -117,30 +120,186 @@
       height = canvas.height = window.innerHeight;
     });
 
-    const COUNT = 220;
+    const HEART_COUNT = 180;
+    const LETTER_COUNT = 70;
+    const TOTAL_COUNT = HEART_COUNT + LETTER_COUNT;
+
     let items = [];
+    let sparkles = [];
+    let burstParticles = [];
+    let flashIntensity = 0;
     let isHeart = false;
     let animTime = 0;
 
-    // Углы поворота 3D-пространства
+    // Вращение сцены
     let rotX = 0;
     let rotY = 0;
     let velX = 0;
-    let velY = 0.007; // Фоновое медленное автовращение
+    let velY = 0.006;
     let isDragging = false;
+    let pointerStartX = 0;
+    let pointerStartY = 0;
     let lastMouseX = 0;
     let lastMouseY = 0;
 
-    // Обработка 3D-интерактивного вращения
+    function getHeart3D(t, u) {
+      const x = 16 * Math.pow(Math.sin(t), 3);
+      const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      const zScale = Math.sin(t / 2) * (1 - Math.abs(y) / 22);
+      const z = u * 8 * Math.max(0.3, zScale);
+      return { x, y, z };
+    }
+
+    function getLetterKPoints() {
+      const pts = [];
+      const stemCount = Math.floor(LETTER_COUNT * 0.44);
+      const branchCount = Math.floor((LETTER_COUNT - stemCount) / 2);
+
+      const stemX = -26;
+      const topY = -60;
+      const botY = 40;
+      const midY = -10;
+
+      for (let i = 0; i < stemCount; i++) {
+        const progress = i / (stemCount - 1);
+        const y = topY + (botY - topY) * progress;
+        const z = (Math.random() - 0.5) * 12;
+        pts.push({ x: stemX, y, z });
+      }
+
+      for (let i = 0; i < branchCount; i++) {
+        const progress = i / (branchCount - 1);
+        const x = stemX + 5 + progress * 52;
+        const y = midY - progress * 50;
+        const z = (Math.random() - 0.5) * 12;
+        pts.push({ x, y, z });
+      }
+
+      const remaining = LETTER_COUNT - pts.length;
+      for (let i = 0; i < remaining; i++) {
+        const progress = i / (remaining - 1);
+        const x = stemX + 5 + progress * 52;
+        const y = midY + progress * 50;
+        const z = (Math.random() - 0.5) * 12;
+        pts.push({ x, y, z });
+      }
+      return pts;
+    }
+
+    class TextItem3D {
+      constructor(index, isLetterK, targetPos) {
+        this.index = index;
+        this.isLetterK = isLetterK;
+
+        const phi = Math.acos(-1 + (2 * index) / TOTAL_COUNT);
+        const theta = Math.sqrt(TOTAL_COUNT * Math.PI) * phi;
+        const sphereRadius = 150;
+
+        this.sphereX = sphereRadius * Math.cos(theta) * Math.sin(phi);
+        this.sphereY = sphereRadius * Math.sin(theta) * Math.sin(phi);
+        this.sphereZ = sphereRadius * Math.cos(phi);
+
+        this.heartX = targetPos.x;
+        this.heartY = targetPos.y;
+        this.heartZ = targetPos.z;
+
+        this.x = this.sphereX;
+        this.y = this.sphereY;
+        this.z = this.sphereZ;
+        this.targetX = this.sphereX;
+        this.targetY = this.sphereY;
+        this.targetZ = this.sphereZ;
+
+        this.speed = 0.038 + Math.random() * 0.02;
+        this.itemScale = isLetterK ? 0.78 : 0.95;
+
+        // Координаты проекции для проверки тапа
+        this.screenX = 0;
+        this.screenY = 0;
+      }
+
+      update() {
+        this.x += (this.targetX - this.x) * this.speed;
+        this.y += (this.targetY - this.y) * this.speed;
+        this.z += (this.targetZ - this.z) * this.speed;
+
+        if (isHeart) {
+          const tBeat = (animTime * 2.3) % (Math.PI * 2);
+          let beat = 0;
+          if (tBeat < 0.6) {
+            beat = Math.sin(tBeat * (Math.PI / 0.6)) * 0.06;
+          } else if (tBeat > 0.8 && tBeat < 1.3) {
+            beat = Math.sin((tBeat - 0.8) * (Math.PI / 0.5)) * 0.035;
+          }
+
+          this.targetX = this.heartX * (1 + beat);
+          this.targetY = this.heartY * (1 + beat);
+          this.targetZ = this.heartZ * (1 + beat);
+        }
+      }
+    }
+
+    // Класс частицы кометного взрыва
+    class BurstParticle3D {
+      constructor(originX, originY, originZ) {
+        this.x = originX;
+        this.y = originY;
+        this.z = originZ;
+
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(Math.random() * 2 - 1);
+        const speed = 4 + Math.random() * 9;
+
+        this.vx = Math.sin(phi) * Math.cos(theta) * speed;
+        this.vy = Math.sin(phi) * Math.sin(theta) * speed;
+        this.vz = Math.cos(phi) * speed;
+
+        this.life = 1.0;
+        this.decay = 0.015 + Math.random() * 0.02;
+        this.size = 1.6 + Math.random() * 2.0;
+      }
+
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.z += this.vz;
+
+        this.vx *= 0.93;
+        this.vy *= 0.93;
+        this.vz *= 0.93;
+
+        this.life -= this.decay;
+      }
+    }
+
+    function triggerSupernova() {
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('heavy');
+      }
+
+      flashIntensity = 1.0;
+
+      // Порождаем 90 комет в 3D
+      for (let i = 0; i < 90; i++) {
+        burstParticles.push(new BurstParticle3D(
+          (Math.random() - 0.5) * 20,
+          -15 + (Math.random() - 0.5) * 30,
+          (Math.random() - 0.5) * 20
+        ));
+      }
+    }
+
+    // Обработка касаний: различаем свайп вращения и клик по "К"
     function onPointerDown(e) {
       isDragging = true;
       const x = e.clientX || e.touches[0].clientX;
       const y = e.clientY || e.touches[0].clientY;
+      pointerStartX = x;
+      pointerStartY = y;
       lastMouseX = x;
       lastMouseY = y;
       velX = 0;
       velY = 0;
-      hint.style.opacity = '0.15';
     }
 
     function onPointerMove(e) {
@@ -160,8 +319,34 @@
       lastMouseY = y;
     }
 
-    function onPointerUp() {
+    function onPointerUp(e) {
+      if (!isDragging) return;
       isDragging = false;
+
+      const endX = lastMouseX;
+      const endY = lastMouseY;
+      const dist = Math.hypot(endX - pointerStartX, endY - pointerStartY);
+
+      // Если это был короткий клик/тап (не длинный свайп)
+      if (dist < 12) {
+        // Проверяем клик в область буквы К
+        let clickedK = false;
+        for (let item of items) {
+          if (item.isLetterK) {
+            const d = Math.hypot(endX - item.screenX, endY - item.screenY);
+            if (d < 35) {
+              clickedK = true;
+              break;
+            }
+          }
+        }
+
+        // Если кликнули по букве К или рядом с центром
+        const centerDist = Math.hypot(endX - width / 2, endY - (height / 2 - 35));
+        if (clickedK || (isHeart && centerDist < 60)) {
+          triggerSupernova();
+        }
+      }
     }
 
     window.addEventListener('mousedown', onPointerDown);
@@ -172,97 +357,60 @@
     window.addEventListener('touchmove', onPointerMove, { passive: true });
     window.addEventListener('touchend', onPointerUp);
 
-    // Математика 3D-поверхности сердца
-    function getHeart3D(t, u) {
-      // t от 0 до 2PI (контур), u от -1 до 1 (толщина по оси Z)
-      const x = 16 * Math.pow(Math.sin(t), 3);
-      const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
-      
-      // Заужение к низу для анатомической трехмерной формы
-      const zScale = Math.sin(t / 2) * (1 - Math.abs(y) / 22);
-      const z = u * 8 * Math.max(0.2, zScale);
-
-      return { x, y, z };
-    }
-
-    class TextItem3D {
-      constructor(index) {
-        this.index = index;
-
-        // Текущие 3D координаты
-        this.x = 0;
-        this.y = 0;
-        this.z = 0;
-
-        // Целевые координаты
-        this.targetX = 0;
-        this.targetY = 0;
-        this.targetZ = 0;
-
-        this.baseHeartX = 0;
-        this.baseHeartY = 0;
-        this.baseHeartZ = 0;
-
-        // 3D сфера (начальное состояние)
-        const phi = Math.acos(-1 + (2 * index) / COUNT);
-        const theta = Math.sqrt(COUNT * Math.PI) * phi;
-        const sphereRadius = 140;
-
-        this.sphereX = sphereRadius * Math.cos(theta) * Math.sin(phi);
-        this.sphereY = sphereRadius * Math.sin(theta) * Math.sin(phi);
-        this.sphereZ = sphereRadius * Math.cos(phi);
-
-        // 3D сердце (целевое состояние)
-        const t = Math.PI * 2 * (index / COUNT);
-        const u = (Math.random() - 0.5) * 2;
-        const scale = 11;
-        const h = getHeart3D(t, u);
-
-        this.heartX = h.x * scale;
-        this.heartY = h.y * scale;
-        this.heartZ = h.z * scale;
-
-        // Стартуем в сфере
-        this.x = this.sphereX;
-        this.y = this.sphereY;
-        this.z = this.sphereZ;
-        this.targetX = this.sphereX;
-        this.targetY = this.sphereY;
-        this.targetZ = this.sphereZ;
-
-        this.speed = 0.04 + Math.random() * 0.02;
+    class Sparkle {
+      constructor() {
+        this.reset();
       }
-
+      reset() {
+        this.x = Math.random() * width;
+        this.y = Math.random() * height;
+        this.size = Math.random() * 1.5 + 0.4;
+        this.alpha = Math.random() * 0.4;
+      }
       update() {
-        this.x += (this.targetX - this.x) * this.speed;
-        this.y += (this.targetY - this.y) * this.speed;
-        this.z += (this.targetZ - this.z) * this.speed;
-
-        // 3D-пульсация сердца
-        if (isHeart) {
-          const tBeat = (animTime * 2.4) % (Math.PI * 2);
-          let beat = 0;
-          if (tBeat < 0.6) {
-            beat = Math.sin(tBeat * (Math.PI / 0.6)) * 0.07;
-          } else if (tBeat > 0.8 && tBeat < 1.3) {
-            beat = Math.sin((tBeat - 0.8) * (Math.PI / 0.5)) * 0.04;
-          }
-
-          this.targetX = this.heartX * (1 + beat);
-          this.targetY = this.heartY * (1 + beat);
-          this.targetZ = this.heartZ * (1 + beat);
-        }
+        this.alpha = 0.15 + Math.sin(animTime * 2.5 + this.x) * 0.15;
+      }
+      draw() {
+        ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
     function init() {
       items = [];
-      for (let i = 0; i < COUNT; i++) {
-        items.push(new TextItem3D(i));
+      sparkles = [];
+      burstParticles = [];
+      for (let i = 0; i < 40; i++) sparkles.push(new Sparkle());
+
+      const heartScale = 12;
+      for (let i = 0; i < HEART_COUNT; i++) {
+        const t = Math.PI * 2 * (i / HEART_COUNT);
+        const u = (Math.random() - 0.5) * 2;
+        const h = getHeart3D(t, u);
+        const targetPos = {
+          x: h.x * heartScale,
+          y: h.y * heartScale - 15,
+          z: h.z * heartScale
+        };
+        items.push(new TextItem3D(i, false, targetPos));
+      }
+
+      const kPoints = getLetterKPoints();
+      for (let i = 0; i < kPoints.length; i++) {
+        const idx = HEART_COUNT + i;
+        const targetPos = {
+          x: kPoints[i].x,
+          y: kPoints[i].y - 15,
+          z: kPoints[i].z
+        };
+        items.push(new TextItem3D(idx, true, targetPos));
       }
     }
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (tg?.HapticFeedback) {
         tg.HapticFeedback.notificationOccurred('success');
       }
@@ -286,70 +434,120 @@
     function loop() {
       animTime += 0.02;
 
-      // Кинетическое затухание скорости вращения
       if (!isDragging) {
         rotX += velX;
         rotY += velY;
         velX *= 0.96;
-        velY = velY * 0.96 + 0.0004; // Сохраняем приятное фоновое вращение
+        velY = velY * 0.96 + 0.0004;
       }
 
       ctx.clearRect(0, 0, width, height);
+
+      // Вспышка в центре при взрыве
+      if (flashIntensity > 0.01) {
+        const grad = ctx.createRadialGradient(
+          width / 2, height / 2 - 35, 5,
+          width / 2, height / 2 - 35, 200
+        );
+        grad.addColorStop(0, `rgba(255, 255, 255, ${flashIntensity * 0.4})`);
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, width, height);
+        flashIntensity *= 0.92;
+      }
+
+      for (let s of sparkles) {
+        s.update();
+        s.draw();
+      }
 
       const cosY = Math.cos(rotY);
       const sinY = Math.sin(rotY);
       const cosX = Math.cos(rotX);
       const sinX = Math.sin(rotX);
 
-      const fov = 380; // Фокусное расстояние камеры
+      const fov = 380;
       const centerY = height / 2 - 20;
-
-      // Массив для Z-сортировки (чтобы передние фразы перекрывали задние)
       const renderList = [];
 
+      // 3D рендер надписей
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         item.update();
 
-        // 1. Поворот вокруг оси Y
         let x1 = item.x * cosY - item.z * sinY;
         let z1 = item.z * cosY + item.x * sinY;
 
-        // 2. Поворот вокруг оси X
         let y1 = item.y * cosX - z1 * sinX;
         let z2 = z1 * cosX + item.y * sinX;
 
-        // Перспективная проекция 3D -> 2D
-        const cameraDistance = 320;
+        const cameraDistance = 330;
         const scale = fov / (fov + z2 + cameraDistance);
 
-        const screenX = width / 2 + x1 * scale;
-        const screenY = centerY + y1 * scale;
+        item.screenX = width / 2 + x1 * scale;
+        item.screenY = centerY + y1 * scale;
 
-        // Эффект глубины резкости (передний план ярче и крупнее)
-        const depthAlpha = Math.max(0.12, Math.min(1.0, (z2 + 200) / 360));
+        const baseAlpha = item.isLetterK ? 1.0 : 0.85;
+        const depthAlpha = Math.max(0.15, Math.min(baseAlpha, (z2 + 220) / 340));
 
         renderList.push({
-          x: screenX,
-          y: screenY,
+          type: 'text',
+          x: item.screenX,
+          y: item.screenY,
           z: z2,
-          scale: scale * 0.9,
+          scale: scale * item.itemScale,
           alpha: depthAlpha
         });
       }
 
-      // Сортировка по Z: сначала рисуем дальние, затем ближние
+      // 3D рендер взрывных частиц-комет
+      for (let i = burstParticles.length - 1; i >= 0; i--) {
+        const bp = burstParticles[i];
+        bp.update();
+        if (bp.life <= 0) {
+          burstParticles.splice(i, 1);
+          continue;
+        }
+
+        let x1 = bp.x * cosY - bp.z * sinY;
+        let z1 = bp.z * cosY + bp.x * sinY;
+        let y1 = bp.y * cosX - z1 * sinX;
+        let z2 = z1 * cosX + bp.y * sinX;
+
+        const cameraDistance = 330;
+        const scale = fov / (fov + z2 + cameraDistance);
+
+        renderList.push({
+          type: 'particle',
+          x: width / 2 + x1 * scale,
+          y: centerY + y1 * scale,
+          z: z2,
+          size: bp.size * scale,
+          alpha: bp.life
+        });
+      }
+
       renderList.sort((a, b) => a.z - b.z);
 
-      // Отрисовка
       for (let i = 0; i < renderList.length; i++) {
         const p = renderList[i];
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.scale(p.scale, p.scale);
-        ctx.globalAlpha = p.alpha;
-        ctx.drawImage(spriteCanvas, -SPRITE_W / 2, -SPRITE_H / 2);
-        ctx.restore();
+        if (p.type === 'text') {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.scale(p.scale, p.scale);
+          ctx.globalAlpha = p.alpha;
+          ctx.drawImage(spriteCanvas, -SPRITE_W / 2, -SPRITE_H / 2);
+          ctx.restore();
+        } else if (p.type === 'particle') {
+          ctx.save();
+          ctx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+          ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       }
 
       requestAnimationFrame(loop);
